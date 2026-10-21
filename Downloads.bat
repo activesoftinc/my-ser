@@ -6,16 +6,11 @@ title Downloads and Installers
 set "DESKTOP=C:\Users\Public\Desktop"
 set "LOG=%TEMP%\Downloads-install.log"
 
-echo ================================================== > "%LOG%"
-echo Downloads.bat started at %DATE% %TIME% >> "%LOG%"
-echo ================================================== >> "%LOG%"
-
+echo Downloads started at %DATE% %TIME% > "%LOG%"
 echo Current user: %USERNAME%
 echo Log file: %LOG%
 
-if not exist "%DESKTOP%" (
-    mkdir "%DESKTOP%" 2>nul
-)
+if not exist "%DESKTOP%" mkdir "%DESKTOP%" 2>nul
 
 if not exist "%DESKTOP%" (
     echo ERROR: Desktop directory is unavailable.
@@ -28,30 +23,31 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo.
-echo [1/5] Downloading Telegram...
+echo [1/3] Downloading Telegram...
 call :Download "https://telegram.org/dl/desktop/win64" "%DESKTOP%\Telegram.exe"
 if errorlevel 1 goto :Failure
 
-echo.
-echo [2/5] Downloading 7-Zip...
+echo [2/3] Downloading 7-Zip...
 call :Download "https://www.7-zip.org/a/7z2501-x64.exe" "%DESKTOP%\7zip.exe"
 if errorlevel 1 goto :Failure
 
-echo.
-echo [3/5] Downloading VMQuickConfig...
+echo [3/3] Downloading VMQuickConfig...
 call :Download "https://github.com/chieunhatnang/VM-QuickConfig/releases/download/1.6.1/VMQuickConfig.exe" "%DESKTOP%\VMQuickConfig.exe"
 if errorlevel 1 goto :Failure
 
-echo.
-echo [4/5] Installing Telegram...
-call :Install "%DESKTOP%\Telegram.exe" "/VERYSILENT /NORESTART" 180
+echo Installing Telegram...
+call :Install "%DESKTOP%\Telegram.exe" "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /LOG=%TEMP%\Telegram-setup.log" 180
+
+if exist "%TEMP%\Telegram-setup.log" (
+    echo ===== Telegram installer log =====
+    type "%TEMP%\Telegram-setup.log"
+)
+
 if errorlevel 1 goto :Failure
 
 del /q "%DESKTOP%\Telegram.exe" 2>nul
 
-echo.
-echo [5/5] Installing 7-Zip...
+echo Installing 7-Zip...
 call :Install "%DESKTOP%\7zip.exe" "/S" 180
 if errorlevel 1 goto :Failure
 
@@ -59,19 +55,18 @@ del /q "%DESKTOP%\7zip.exe" 2>nul
 
 echo.
 echo VMQuickConfig.exe was downloaded but NOT executed.
-echo Review it before deciding whether to run it.
-echo.
+echo Review it before running it.
+echo Epic Games Launcher and Unity Hub shortcuts were preserved.
 
-echo SUCCESS: All requested download and installer steps completed. >> "%LOG%"
+echo SUCCESS: All download and installation steps completed. >> "%LOG%"
 echo Finished at %DATE% %TIME% >> "%LOG%"
-echo Log: %LOG%
 
 exit /b 0
 
 
 :Download
-echo Downloading: %~1
-echo [%DATE% %TIME%] DOWNLOAD %~1 >> "%LOG%"
+echo Downloading %~1
+echo DOWNLOAD START: %~1 >> "%LOG%"
 
 curl.exe --fail --location --show-error --silent ^
     --connect-timeout 15 --max-time 120 ^
@@ -106,7 +101,7 @@ echo Starting installer: %~1
 echo INSTALL START: %~1 >> "%LOG%"
 
 powershell.exe -NoProfile -NonInteractive -Command ^
-  "$ErrorActionPreference='Stop'; $exe=$args[0]; $argLine=$args[1]; $limit=[int]$args[2]; $p=Start-Process -FilePath $exe -ArgumentList $argLine -PassThru; if(-not $p.WaitForExit($limit*1000)){ Write-Output 'INSTALL TIMEOUT'; & taskkill.exe /PID $p.Id /T /F 2>&1 | Out-String | Write-Output; exit 124 }; $p.Refresh(); Write-Output ('INSTALL EXIT CODE: ' + $p.ExitCode); exit $p.ExitCode" ^
+  "$ErrorActionPreference='Stop'; $exe=$args[0]; $argLine=$args[1]; $limit=[int]$args[2]; $p=Start-Process -FilePath $exe -ArgumentList $argLine -PassThru; if(-not $p.WaitForExit($limit*1000)){ & taskkill.exe /PID $p.Id /T /F | Out-Null; Write-Output 'INSTALL TIMEOUT'; exit 124 }; $p.Refresh(); Write-Output ('INSTALL EXIT CODE: ' + $p.ExitCode); exit $p.ExitCode" ^
   "%~1" "%~2" "%~3" >> "%LOG%" 2>&1
 
 set "INSTALL_RESULT=%ERRORLEVEL%"
