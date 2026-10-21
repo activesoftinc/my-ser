@@ -1,10 +1,13 @@
-
 @echo off
 setlocal EnableExtensions
 
 title Downloads and Installers
+
 set "DESKTOP=C:\Users\Public\Desktop"
 set "LOG=%TEMP%\Downloads-install.log"
+set "TELEGRAM=%DESKTOP%\Telegram.exe"
+set "ZIP=%DESKTOP%\7zip.exe"
+set "VMCONFIG=%DESKTOP%\VMQuickConfig.exe"
 
 echo Downloads started at %DATE% %TIME% > "%LOG%"
 echo Current user: %USERNAME%
@@ -24,53 +27,53 @@ if errorlevel 1 (
 )
 
 echo [1/3] Downloading Telegram...
-call :Download "https://telegram.org/dl/desktop/win64" "%DESKTOP%\Telegram.exe"
+call :Download "https://telegram.org/dl/desktop/win64" "%TELEGRAM%"
 if errorlevel 1 goto :Failure
 
-echo [2/3] Downloading 7-Zip...
-call :Download "https://www.7-zip.org/a/7z2501-x64.exe" "%DESKTOP%\7zip.exe"
-if errorlevel 1 goto :Failure
+echo Checking Telegram digital signature...
+powershell.exe -NoProfile -NonInteractive -Command ^
+  "$s=Get-AuthenticodeSignature -LiteralPath $args[0]; Write-Output ('Signature status: ' + $s.Status); if($s.SignerCertificate){Write-Output ('Signer: ' + $s.SignerCertificate.Subject)}" ^
+  "%TELEGRAM%" >> "%LOG%" 2>&1
 
-echo [3/3] Downloading VMQuickConfig...
-call :Download "https://github.com/chieunhatnang/VM-QuickConfig/releases/download/1.6.1/VMQuickConfig.exe" "%DESKTOP%\VMQuickConfig.exe"
-if errorlevel 1 goto :Failure
+type "%LOG%"
 
-echo Installing Telegram...
-call :Install "%DESKTOP%\Telegram.exe" "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /LOG=%TEMP%\Telegram-setup.log" 180
-
-if exist "%TEMP%\Telegram-setup.log" (
-    echo ===== Telegram installer log =====
-    type "%TEMP%\Telegram-setup.log"
-)
-
-if errorlevel 1 goto :Failure
-
-del /q "%DESKTOP%\Telegram.exe" 2>nul
-
-echo Installing 7-Zip...
-call :Install "%DESKTOP%\7zip.exe" "/S" 180
-if errorlevel 1 goto :Failure
-
-del /q "%DESKTOP%\7zip.exe" 2>nul
+echo Telegram downloaded for review; it has NOT been executed.
 
 echo.
-echo VMQuickConfig.exe was downloaded but NOT executed.
-echo Review it before running it.
-echo Epic Games Launcher and Unity Hub shortcuts were preserved.
+echo [2/3] Downloading 7-Zip...
+call :Download "https://www.7-zip.org/a/7z2501-x64.exe" "%ZIP%"
+if errorlevel 1 goto :Failure
 
-echo SUCCESS: All download and installation steps completed. >> "%LOG%"
+echo Installing 7-Zip...
+call :Install "%ZIP%" "/S" 180
+if errorlevel 1 goto :Failure
+
+del /q "%ZIP%" 2>nul
+
+echo.
+echo [3/3] Downloading VMQuickConfig...
+call :Download "https://github.com/chieunhatnang/VM-QuickConfig/releases/download/1.6.1/VMQuickConfig.exe" "%VMCONFIG%"
+if errorlevel 1 goto :Failure
+
+echo VMQuickConfig.exe downloaded but NOT executed.
+echo Review the executable before deciding whether to run it.
+
+echo.
+echo Epic Games Launcher and Unity Hub shortcuts were preserved.
+echo No hidden PowerShell scripts were executed.
+
+echo SUCCESS: Download and installation steps completed. >> "%LOG%"
 echo Finished at %DATE% %TIME% >> "%LOG%"
 
 exit /b 0
 
-
 :Download
-echo Downloading %~1
+echo Downloading: %~1
 echo DOWNLOAD START: %~1 >> "%LOG%"
 
 curl.exe --fail --location --show-error --silent ^
-    --connect-timeout 15 --max-time 120 ^
-    --output "%~2" "%~1" >> "%LOG%" 2>&1
+  --connect-timeout 15 --max-time 120 ^
+  --output "%~2" "%~1" >> "%LOG%" 2>&1
 
 if errorlevel 1 (
     echo ERROR: Download failed: %~1
@@ -93,8 +96,8 @@ if "%FILESIZE%"=="0" (
 
 echo Download successful: %~2 (%FILESIZE% bytes)
 echo DOWNLOAD OK: %~2 (%FILESIZE% bytes) >> "%LOG%"
-exit /b 0
 
+exit /b 0
 
 :Install
 echo Starting installer: %~1
@@ -105,6 +108,7 @@ powershell.exe -NoProfile -NonInteractive -Command ^
   "%~1" "%~2" "%~3" >> "%LOG%" 2>&1
 
 set "INSTALL_RESULT=%ERRORLEVEL%"
+
 echo Installer exit code: %INSTALL_RESULT%
 echo INSTALL RESULT: %~1 exit=%INSTALL_RESULT% >> "%LOG%"
 
@@ -114,7 +118,6 @@ if not "%INSTALL_RESULT%"=="0" (
 )
 
 exit /b 0
-
 
 :Failure
 echo.
