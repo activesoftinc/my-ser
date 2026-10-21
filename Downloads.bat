@@ -1,3 +1,4 @@
+
 @echo off
 setlocal EnableExtensions
 
@@ -5,11 +6,13 @@ title Downloads and Installers
 
 set "DESKTOP=C:\Users\Public\Desktop"
 set "LOG=%TEMP%\Downloads-install.log"
-set "TELEGRAM=%DESKTOP%\Telegram.exe"
 set "ZIP=%DESKTOP%\7zip.exe"
 set "VMCONFIG=%DESKTOP%\VMQuickConfig.exe"
 
-echo Downloads started at %DATE% %TIME% > "%LOG%"
+echo ================================================== > "%LOG%"
+echo Downloads started at %DATE% %TIME% >> "%LOG%"
+echo ================================================== >> "%LOG%"
+
 echo Current user: %USERNAME%
 echo Log file: %LOG%
 
@@ -26,78 +29,105 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [1/3] Downloading Telegram...
-call :Download "https://telegram.org/dl/desktop/win64" "%TELEGRAM%"
+echo.
+echo [1/2] Downloading 7-Zip...
+
+call :Download ^
+    "https://www.7-zip.org/a/7z2501-x64.exe" ^
+    "%ZIP%"
+
 if errorlevel 1 goto :Failure
-
-echo Checking Telegram digital signature...
-powershell.exe -NoProfile -NonInteractive -Command ^
-  "$s=Get-AuthenticodeSignature -LiteralPath $args[0]; Write-Output ('Signature status: ' + $s.Status); if($s.SignerCertificate){Write-Output ('Signer: ' + $s.SignerCertificate.Subject)}" ^
-  "%TELEGRAM%" >> "%LOG%" 2>&1
-
-type "%LOG%"
-
-echo Telegram downloaded for review; it has NOT been executed.
 
 echo.
-echo [2/3] Downloading 7-Zip...
-call :Download "https://www.7-zip.org/a/7z2501-x64.exe" "%ZIP%"
+echo [2/2] Downloading VMQuickConfig...
+
+call :Download ^
+    "https://github.com/chieunhatnang/VM-QuickConfig/releases/download/1.6.1/VMQuickConfig.exe" ^
+    "%VMCONFIG%"
+
 if errorlevel 1 goto :Failure
 
+echo.
 echo Installing 7-Zip...
+
 call :Install "%ZIP%" "/S" 180
+
 if errorlevel 1 goto :Failure
 
 del /q "%ZIP%" 2>nul
 
 echo.
-echo [3/3] Downloading VMQuickConfig...
-call :Download "https://github.com/chieunhatnang/VM-QuickConfig/releases/download/1.6.1/VMQuickConfig.exe" "%VMCONFIG%"
-if errorlevel 1 goto :Failure
+echo ==========================================
+echo Installation and download steps completed.
+echo ==========================================
 
-echo VMQuickConfig.exe downloaded but NOT executed.
-echo Review the executable before deciding whether to run it.
+echo VMQuickConfig.exe was downloaded but NOT executed.
+echo Review it before deciding whether to run it.
 
-echo.
 echo Epic Games Launcher and Unity Hub shortcuts were preserved.
+echo No Telegram download or installation was performed.
 echo No hidden PowerShell scripts were executed.
 
-echo SUCCESS: Download and installation steps completed. >> "%LOG%"
-echo Finished at %DATE% %TIME% >> "%LOG%"
+echo SUCCESS: Tasks completed at %DATE% %TIME% >> "%LOG%"
+
+echo.
+echo Log file: %LOG%
 
 exit /b 0
+
 
 :Download
 echo Downloading: %~1
 echo DOWNLOAD START: %~1 >> "%LOG%"
 
+set "DOWNLOAD_ATTEMPT=1"
+
+:DownloadRetry
+echo Attempt %DOWNLOAD_ATTEMPT% of 3...
+
+if exist "%~2" del /q "%~2" 2>nul
+
 curl.exe --fail --location --show-error --silent ^
-  --connect-timeout 15 --max-time 120 ^
-  --output "%~2" "%~1" >> "%LOG%" 2>&1
+    --connect-timeout 20 ^
+    --max-time 240 ^
+    --retry 2 ^
+    --retry-delay 3 ^
+    --output "%~2" "%~1" >> "%LOG%" 2>&1
 
-if errorlevel 1 (
-    echo ERROR: Download failed: %~1
-    echo DOWNLOAD FAILED: %~1 >> "%LOG%"
-    del /q "%~2" 2>nul
-    exit /b 1
-)
+if errorlevel 1 goto :DownloadFailed
 
-if not exist "%~2" (
-    echo ERROR: Downloaded file is missing.
-    exit /b 1
-)
+if not exist "%~2" goto :DownloadFailed
+
+set "FILESIZE=0"
 
 for %%F in ("%~2") do set "FILESIZE=%%~zF"
 
-if "%FILESIZE%"=="0" (
-    echo ERROR: Downloaded file is empty.
-    exit /b 1
-)
+if "%FILESIZE%"=="0" goto :DownloadFailed
 
 echo Download successful: %~2 (%FILESIZE% bytes)
 echo DOWNLOAD OK: %~2 (%FILESIZE% bytes) >> "%LOG%"
 
 exit /b 0
+
+
+:DownloadFailed
+echo Download attempt %DOWNLOAD_ATTEMPT% failed.
+echo DOWNLOAD ATTEMPT FAILED: %~1 >> "%LOG%"
+
+if exist "%~2" del /q "%~2" 2>nul
+
+set /a DOWNLOAD_ATTEMPT+=1
+
+if %DOWNLOAD_ATTEMPT% LEQ 3 (
+    timeout /t 3 /nobreak >nul
+    goto :DownloadRetry
+)
+
+echo ERROR: Download failed after 3 attempts.
+echo DOWNLOAD FAILED: %~1 >> "%LOG%"
+
+exit /b 1
+
 
 :Install
 echo Starting installer: %~1
@@ -117,11 +147,18 @@ if not "%INSTALL_RESULT%"=="0" (
     exit /b 1
 )
 
+echo Installer completed successfully.
+
 exit /b 0
+
 
 :Failure
 echo.
-echo ERROR: A download or installation step failed.
-echo Check the log at: %LOG%
+echo ==========================================
+echo ERROR: A download or installation failed.
+echo ==========================================
+
+echo Check the log file: %LOG%
 echo FAILED at %DATE% %TIME% >> "%LOG%"
+
 exit /b 1
